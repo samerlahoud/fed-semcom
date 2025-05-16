@@ -38,14 +38,31 @@ torch.manual_seed(SEED)
 random.seed(SEED)
 torch.cuda.manual_seed_all(SEED)
 
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--data_root", default="./tiny-imagenet-20")
+parser.add_argument("--device",    default="cuda",  choices=["cuda", "cpu", "mps"])
+parser.add_argument("--rounds",    type=int, default=5)
+parser.add_argument("--workers",   type=int, default=0)
+parser.add_argument("--batch_size",type=int, default=32)
+args = parser.parse_args()
+
+DATA_ROOT   = args.data_root
+DEVICE      = args.device
+ROUNDS      = args.rounds
+WORKERS     = args.workers
+BATCH_SIZE  = args.batch_size
+PIN_MEM     = DEVICE == "cuda"
+
 # ------------------------------------------------------------------
 # 1. Hyper-parameters and FL configuration
 # ------------------------------------------------------------------
 NUM_CLIENTS      = 5            # K in the paper
 DIRICHLET_ALPHA  = 1.0          # α controls non-IID level
-ROUNDS           = 5            # global communication rounds
+#ROUNDS           = 5            # global communication rounds
 LOCAL_EPOCHS     = 4            # each client’s local passes
-BATCH_SIZE       = 32
+#BATCH_SIZE       = 32
 LR               = 1e-3
 BOTTLENECK       = 1024         # semantic latent size
 COMPRESSED       = 64           # channel code length
@@ -55,15 +72,15 @@ ALPHA_LOSS       = 0.9          # weight for the MSE term in hybrid loss
 PIXELS           = 64 * 64 * 3  # constant for per-pixel metrics
 
 # Device selection with proper MPS fallback
-DEVICE = (
-    "cuda"
-    if torch.cuda.is_available()
-    else ("mps" if torch.backends.mps.is_available() else "cpu")
-)
+#DEVICE = (
+#    "cuda"
+#    if torch.cuda.is_available()
+#    else ("mps" if torch.backends.mps.is_available() else "cpu")
+#)
 
 # Worker settings (spawn issues on macOS); set > 0 on Linux / Colab
-WORKERS = 0
-PIN_MEM = DEVICE == "cuda"
+#WORKERS = 0
+#PIN_MEM = DEVICE == "cuda"
 
 # ------------------------------------------------------------------
 # 2. Model components
