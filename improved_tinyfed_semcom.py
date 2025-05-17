@@ -368,6 +368,8 @@ def validate(
             samples += img.size(0)
             pbar.set_postfix({"MSE": mse_sum/samples})
     
+    avg_mse = mse_sum / (samples * config.pixels)
+    
     return {
         "mse": mse_sum / samples,
         "ssim": ssim_sum / samples,
