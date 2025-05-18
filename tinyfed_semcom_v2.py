@@ -40,7 +40,7 @@ DW1, DW2     = 16, 32       # depthwise channels
 SPARSITY_P   = 0.10         # keep top‑10 % gradient elements
 BATCH_SIZE   = 32
 LOCAL_EPOCHS = 2
-ROUNDS       = 3
+ROUNDS       = 5
 LR           = 3e-3
 PIXELS       = 64 * 64 * 3
 
