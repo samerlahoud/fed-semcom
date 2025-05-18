@@ -295,8 +295,8 @@ def sparsify_gradients(model: nn.Module, p: float) -> None:
             continue
         g = w.grad.data
         k = max(1, int(g.numel() * p))
-        th = g.abs().flatten().kthvalue(g.numel() - k).values
-        mask = (g.abs() >= th)
+        th = g.abs().flatten().kthvalue(g.numel() - k + 1).values
+        mask = (g.abs() > th)
         g.mul_(mask)
 
 def train_one_epoch(
@@ -520,6 +520,7 @@ def visualize_reconstructions(
     
     # Also save as raw image for easier viewing
     save_image(grid, os.path.join(config.save_dir, f"grid_{epoch}.png"))
+    plt.close()
     
     print(f"✓ Visualization saved to {filepath}")
 
