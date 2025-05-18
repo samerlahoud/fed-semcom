@@ -5,6 +5,8 @@ import tensorflow as tf
 from tensorflow.keras import layers, models
 from tensorflow.keras.datasets import cifar10
 
+tf.config.run_functions_eagerly(True)
+
 # Load CIFAR-10 and normalize
 (x_train_full, y_train_full), (x_test, _) = cifar10.load_data()
 x_train_full = x_train_full.astype("float32") / 255.0
