@@ -7,17 +7,18 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from tensorflow.keras import layers, models
 from tensorflow.keras.datasets import cifar10
+import tensorflow.image as tf_image
 
-# Load CIFAR-10 and normalize
+# Load CIFAR-10
 (x_train_full, y_train_full), (x_test, _) = cifar10.load_data()
 x_train_full = x_train_full.astype("float32") / 255.0
 x_test = x_test.astype("float32") / 255.0
 
-# Define non-IID client data
+# Define non-IID clients
 client_classes = {
-    0: [0, 1],  # airplane, automobile
-    1: [2, 3],  # bird, cat
-    2: [4, 5],  # deer, dog
+    0: [0, 1],
+    1: [2, 3],
+    2: [4, 5],
 }
 
 def get_client_data(classes):
@@ -26,7 +27,7 @@ def get_client_data(classes):
 
 client_data = {i: get_client_data(classes) for i, classes in client_classes.items()}
 
-# Lightweight semantic encoder-decoder model
+# Semantic encoder-decoder
 def create_semantic_model():
     inputs = layers.Input(shape=(32, 32, 3))
     x = layers.Conv2D(16, 3, activation="relu", padding="same")(inputs)
@@ -39,24 +40,23 @@ def create_semantic_model():
     outputs = layers.Conv2D(3, 3, activation="sigmoid", padding="same")(x)
     return models.Model(inputs, outputs)
 
-# FedLol weight calculation
+# FedLol weighting
 def compute_fedlol_weights(losses):
     total_loss = np.sum(losses)
     return [(total_loss - lk) / ((len(losses) - 1) * total_loss) for lk in losses]
 
-# Federated learning parameters
+# Federated training parameters
 NUM_ROUNDS = 5
 LOCAL_EPOCHS = 3
 BATCH_SIZE = 32
 LEARNING_RATE = 1e-3
 
-# Initialize global model and weights
 global_model = create_semantic_model()
 loss_fn = tf.keras.losses.MeanSquaredError()
 global_weights = global_model.get_weights()
 test_losses = []
 
-# Start training rounds
+print("\n=== Starting Federated Training with FedLol ===")
 for rnd in range(NUM_ROUNDS):
     print(f"\n--- Global Round {rnd + 1} ---")
     local_weights = []
@@ -66,8 +66,6 @@ for rnd in range(NUM_ROUNDS):
         x_train, x_val = train_test_split(x_client, test_size=0.1, random_state=rnd)
         local_model = create_semantic_model()
         local_model.set_weights(global_weights)
-
-        # Create a new optimizer for each model
         local_optimizer = tf.keras.optimizers.Adam(LEARNING_RATE)
         local_model.compile(optimizer=local_optimizer, loss=loss_fn)
 
@@ -79,6 +77,8 @@ for rnd in range(NUM_ROUNDS):
         local_losses.append(val_loss)
 
     fedlol_weights = compute_fedlol_weights(local_losses)
+    print(f"FedLol Weights: {[round(w, 4) for w in fedlol_weights]}")
+
     new_weights = []
     for weights_list in zip(*local_weights):
         aggregated = np.sum([w * fedlol_weights[i] for i, w in enumerate(weights_list)], axis=0)
@@ -87,11 +87,13 @@ for rnd in range(NUM_ROUNDS):
     global_weights = new_weights
     global_model.set_weights(global_weights)
 
+    # ✅ Compile before evaluation
+    global_model.compile(optimizer=tf.keras.optimizers.Adam(LEARNING_RATE), loss=loss_fn)
     test_loss = global_model.evaluate(x_test, x_test, verbose=0)
     test_losses.append(test_loss)
     print(f"Global Model Test Loss: {test_loss:.4f}")
 
-# Plot test loss
+# Plot test loss over rounds
 plt.figure(figsize=(6, 4))
 plt.plot(range(1, NUM_ROUNDS + 1), test_losses, marker='o')
 plt.title("Test Loss over Rounds (FedLol)")
@@ -100,9 +102,21 @@ plt.ylabel("MSE Loss")
 plt.grid(True)
 plt.tight_layout()
 plt.show()
+plt.savefig("test_loss_fedlol.png")
 
-# Visualize original vs. reconstructed images
-reconstructed = global_model.predict(x_test[:8])
+# Reconstruct test images
+reconstructed = global_model.predict(x_test[:100])
+reconstructed = np.clip(reconstructed, 0.0, 1.0)
+
+# Compute final PSNR and SSIM
+psnr = tf_image.psnr(x_test[:100], reconstructed, max_val=1.0).numpy().mean()
+ssim = tf_image.ssim(x_test[:100], reconstructed, max_val=1.0).numpy().mean()
+
+print(f"\n=== Final Evaluation ===")
+print(f"PSNR: {psnr:.2f} dB")
+print(f"MS-SSIM: {ssim:.4f}")
+
+# Visualize reconstructed images
 plt.figure(figsize=(12, 4))
 for i in range(8):
     plt.subplot(2, 8, i + 1)
@@ -117,7 +131,7 @@ for i in range(8):
     if i == 0:
         plt.title("Reconstructed")
 
-plt.suptitle("Original vs Reconstructed Images")
+plt.suptitle("Original vs Reconstructed Images (FedLol Global Model)")
 plt.tight_layout()
 plt.show()
-plt.savefig("fedlol_reconstructed.png")
+plt.savefig("reconstructed_images_fedlol.png")
