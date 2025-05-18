@@ -214,7 +214,7 @@ if __name__ == "__main__":
     qat_enabled = False
 
     for rnd in range(1, ROUNDS + 1):
-        if rnd == 3 and not qat_enabled and torch.backends.quantized.supported_engines:
+        if rnd == 5 and not qat_enabled and torch.backends.quantized.supported_engines:
             enable_qat(net)
             qat_enabled = True
             print("Quantisation Aware Training enabled from round 3.")
