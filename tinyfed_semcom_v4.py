@@ -324,7 +324,7 @@ def validate(model: nn.Module, loader: DataLoader, cfg: Config) -> Dict[str, flo
         mse = F.mse_loss(out, img, reduction="sum").item()
         mse_sum += mse
         if _HAS_SSIM:
-            ssim_val = ssim(out, img, data_range=1.0, average=False)
+            ssim_val = ssim(out, img, data_range=1.0, size_average=False)
             ssim_sum += ssim_val.sum().item()  # type: ignore
         count += img.size(0)
 
