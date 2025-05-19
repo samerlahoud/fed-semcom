@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+no channel model enc/dec
+single node no FL
 TinyFed‑SemCom v3  — a micro‑controller friendly semantic‑communication
 training demo with federated logic stripped for single‑node testing.
 Key upgrades relative to v2
