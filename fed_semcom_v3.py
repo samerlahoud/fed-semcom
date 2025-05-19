@@ -1,4 +1,5 @@
 """
+Still buggy
 Fully optimized implementation of the FedLoL semantic-communication framework
 incorporating multiple performance enhancements.
 added channel simulation with JIT compilation and caching
@@ -151,41 +152,42 @@ class ChannelDecoder(nn.Module):
     def forward(self, x):
         return self.fc(x)
 
-
 class OptimizedSemanticComm(nn.Module):
-    """End-to-end semantic communication model with optimized channel"""
+    """End-to-end semantic communication model with minimal optimizations"""
 
     def __init__(self) -> None:
         super().__init__()
         self.enc_s = SemanticEncoder()
         self.enc_c = ChannelEncoder()
-        self.channel = FastChannel()
         self.dec_c = ChannelDecoder()
         self.dec_s = SemanticDecoder()
         
-        # Optional: Convert to FP16 for faster computation on CUDA
-        if USE_FP16:
-            self.half()
+        # Pre-compute SNR conversion factors
+        self.snr_cache = {}
 
-    def forward(self, img, snr_db=10.0):
-        # Handle FP16/FP32 conversion if needed
-        input_dtype = img.dtype
-        if USE_FP16 and input_dtype != torch.float16:
-            img = img.half()
-        
+    def forward(self, img, snr_db=10):
         # Semantic encoding
-        with torch.cuda.amp.autocast(enabled=USE_FP16):
-            z, skips = self.enc_s(img)
-            x = self.enc_c(z)
-            x_hat = self.channel(x, snr_db)
-            z_hat = self.dec_c(x_hat)
-            output = self.dec_s(z_hat, skips)
+        z, skips = self.enc_s(img)
+        x = self.enc_c(z)  # shape: [B, D]
+
+        # KEY OPTIMIZATION: Calculate sigma only once per SNR value
+        if snr_db not in self.snr_cache:
+            self.snr_cache[snr_db] = math.sqrt(1.0 / (2 * 10 ** (snr_db / 10)))
+        sigma = self.snr_cache[snr_db]
         
-        # Convert back to input dtype if necessary
-        if output.dtype != input_dtype:
-            output = output.to(input_dtype)
-            
-        return output
+        # KEY OPTIMIZATION: Skip gradient tracking for channel simulation
+        with torch.no_grad():
+            h = torch.randn_like(x)  # fading coefficient per feature (Rayleigh)
+            noise = sigma * torch.randn_like(x)
+            y = h * x + noise
+            x_hat = y / (h + 1e-6)
+        
+        # Re-enable gradients for the rest of the network
+        x_hat = x_hat.detach().requires_grad_()
+
+        # Channel decoding and semantic reconstruction
+        z_hat = self.dec_c(x_hat)
+        return self.dec_s(z_hat, skips)
 
 
 # ------------------------------------------------------------------
