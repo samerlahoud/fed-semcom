@@ -228,6 +228,19 @@ TRANSFORM = transforms.Compose(
     [transforms.Resize((64, 64)), transforms.ToTensor()]
 )
 
+def fedlol_aggregate(global_model, client_states, client_losses):
+    eps = 1e-8
+    total_loss = sum(client_losses) + eps
+    new_state = copy.deepcopy(global_model.state_dict())
+
+    for k in new_state.keys():
+        new_state[k] = sum(
+            ((total_loss - client_losses[i]) / ((NUM_CLIENTS - 1) * total_loss))
+            * client_states[i][k]
+            for i in range(NUM_CLIENTS)
+        )
+    global_model.load_state_dict(new_state)
+
 def perceptual_loss(pred, target, alpha: float = ALPHA_LOSS):
     mse_term = nn.functional.mse_loss(pred, target, reduction="mean")# in perceptual_loss
     ssim_val = 1.0 - ssim(pred, target, data_range=1.0)
