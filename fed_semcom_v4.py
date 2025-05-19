@@ -135,21 +135,69 @@ class SemanticDecoder(nn.Module):
 
 
 class ChannelEncoder(nn.Module):
-    def __init__(self) -> None:
+    def __init__(self, in_dim, snr_dim=1):
         super().__init__()
-        self.fc = nn.Linear(BOTTLENECK, COMPRESSED)
+        self.snr_proj = nn.Sequential(
+            nn.Linear(snr_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, 64),
+        )
+        self.encoder = nn.Sequential(
+            nn.Linear(in_dim, 512),
+            nn.ReLU(),
+            nn.Linear(512, 512),
+            nn.ReLU(),
+            nn.Linear(512, 512),
+            nn.ReLU(),
+            nn.Linear(512 + 64, 512),  # concat SNR
+            nn.ReLU(),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Linear(256, 128),
+        )
+        self.skip = nn.Linear(in_dim, 128)
 
-    def forward(self, f):
-        return self.fc(f)
+    def forward(self, x, snr_db):
+        snr_feat = self.snr_proj(snr_db.unsqueeze(-1))  # [B, 64]
+        x_mid = self.encoder[0:6](x)  # up to concat point
+        x_concat = torch.cat([x_mid, snr_feat], dim=-1)
+        x_tail = self.encoder[6:](x_concat)
+        return x_tail + self.skip(x)  # skip connection
 
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 class ChannelDecoder(nn.Module):
-    def __init__(self) -> None:
+    def __init__(self, out_dim, snr_dim=1):
         super().__init__()
-        self.fc = nn.Linear(COMPRESSED, BOTTLENECK)
+        self.snr_proj = nn.Sequential(
+            nn.Linear(snr_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, 64)
+        )
+        self.decoder = nn.Sequential(
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Linear(256, 512),
+            nn.ReLU(),
+            nn.Linear(512, 512),
+            nn.ReLU(),
+            nn.Linear(512 + 64, 512),  # Inject SNR
+            nn.ReLU(),
+            nn.Linear(512, 512),
+            nn.ReLU(),
+            nn.Linear(512, out_dim),
+        )
+        self.skip = nn.Linear(128, out_dim)
 
-    def forward(self, x):
-        return self.fc(x)
+    def forward(self, x, snr_db):
+        snr_feat = self.snr_proj(snr_db.unsqueeze(-1))  # [B, 64]
+        x_mid = self.decoder[0:6](x)
+        x_concat = torch.cat([x_mid, snr_feat], dim=-1)
+        x_tail = self.decoder[6:](x_concat)
+        return x_tail + self.skip(x)
 
 class OptimizedSemanticComm(nn.Module):
     """End-to-end semantic communication model with minimal optimizations"""
@@ -165,27 +213,23 @@ class OptimizedSemanticComm(nn.Module):
         self.snr_cache = {}
 
     def forward(self, img, snr_db=10):
-        # Semantic encoding
+        # 1. Semantic encoding
         z, skips = self.enc_s(img)
-        x = self.enc_c(z)  # shape: [B, D]
 
-        # Get cached sigma value or compute it
-        if snr_db not in self.snr_cache:
-            self.snr_cache[snr_db] = math.sqrt(1.0 / (2 * 10 ** (snr_db / 10)))
-        sigma = self.snr_cache[snr_db]
-        
-        # Apply Rayleigh fading without tracking gradients
-        with torch.no_grad():
-            h = torch.randn_like(x)  # fading coefficient per feature (Rayleigh)
-            noise = sigma * torch.randn_like(x)
-            y = h * x + noise
-            x_hat = y / (h + 1e-6)
-        
-        # Re-enable gradients for the rest of the network
-        x_hat = x_hat.detach().requires_grad_()
+        # 2. Channel encoding with SNR
+        x = self.enc_c(z, torch.tensor([snr_db], device=img.device).repeat(z.size(0), 1))  # [B, COMPRESSED]
 
-        # Channel decoding and semantic reconstruction
-        z_hat = self.dec_c(x_hat)
+        # 3. Apply AWGN or Rayleigh channel
+        sigma = math.sqrt(1.0 / (2 * 10 ** (snr_db / 10)))
+        h = torch.randn_like(x)
+        noise = sigma * torch.randn_like(x)
+        y = h * x + noise
+        x_hat = y / (h + 1e-6)
+
+        # 4. Channel decoding with SNR
+        z_hat = self.dec_c(x_hat, torch.tensor([snr_db], device=img.device).repeat(x_hat.size(0), 1))
+
+        # 5. Semantic decoding
         return self.dec_s(z_hat, skips)
 
 
