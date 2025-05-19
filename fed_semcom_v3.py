@@ -162,7 +162,7 @@ class OptimizedSemanticComm(nn.Module):
         self.dec_c = ChannelDecoder()
         self.dec_s = SemanticDecoder()
         
-        # Pre-compute SNR conversion factors
+        # Pre-compute and cache SNR values
         self.snr_cache = {}
 
     def forward(self, img, snr_db=10):
@@ -170,12 +170,12 @@ class OptimizedSemanticComm(nn.Module):
         z, skips = self.enc_s(img)
         x = self.enc_c(z)  # shape: [B, D]
 
-        # KEY OPTIMIZATION: Calculate sigma only once per SNR value
+        # Get cached sigma value or compute it
         if snr_db not in self.snr_cache:
             self.snr_cache[snr_db] = math.sqrt(1.0 / (2 * 10 ** (snr_db / 10)))
         sigma = self.snr_cache[snr_db]
         
-        # KEY OPTIMIZATION: Skip gradient tracking for channel simulation
+        # Apply Rayleigh fading without tracking gradients
         with torch.no_grad():
             h = torch.randn_like(x)  # fading coefficient per feature (Rayleigh)
             noise = sigma * torch.randn_like(x)
