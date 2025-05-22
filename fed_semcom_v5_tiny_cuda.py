@@ -52,7 +52,7 @@ GRAD_CLIP_VALUE  = 1.0
 CHANNEL_EPSILON  = 1e-5 # Increased epsilon for channel simulation stability with FP16
 
 # Debug flag to force FP32 on CUDA if FP16 causes issues
-DEBUG_FORCE_FP32_ON_CUDA = False # Set to True to disable FP16 for debugging
+DEBUG_FORCE_FP32_ON_CUDA = True # Set to True to disable FP16 for debugging
 
 # ------------------------------------------------------------------
 # Performance optimizations
