@@ -207,7 +207,7 @@ def local_train_optimized(model, loader, epochs: int):
     model.train()
     opt = optim.Adam(model.parameters(), lr=LR)
     scaler_enabled = USE_FP16 and DEVICE=="cuda" # Explicitly check DEVICE too
-    scaler = torch.amp.GradScaler(device_type=DEVICE, enabled=scaler_enabled)
+    scaler = torch.amp.GradScaler(enabled=scaler_enabled)
     
     cumulative_loss = 0.0
     num_batches = 0
